@@ -20,6 +20,7 @@ const FormSchema = z.object({
 });
 
 const CreateInvoice = FormSchema.omit({ id: true, date: true });
+const CreateProduct = FormSchema.omit({ id: true, date: true });
 
 export type State = {
   errors?: {
@@ -64,7 +65,42 @@ export async function createInvoice(prevState: State, formData: FormData) {
   redirect('/dashboard/invoices');
 };
 
+export async function createProduct(prevState: State, formData: FormData) {
+
+  const validatedFields = CreateProduct.safeParse({
+    customerId: formData.get('customerId'),
+    amount: formData.get('amount'),
+    status: formData.get('status'),
+  });
+
+  if (!validatedFields.success) {
+    return {
+      errors: validatedFields.error.flatten().fieldErrors,
+      message: 'Missing Fields. Failed to Create Product.',
+    };
+  }
+
+  const { customerId, amount, status } = validatedFields.data;
+  const amountInCents = amount * 100;
+  const date = new Date().toISOString().split('T')[0];
+
+  try {
+    await sql`
+      INSERT INTO products (customer_id, amount, status, date)
+      VALUES (${customerId}, ${amountInCents}, ${status}, ${date})
+    `;
+  } catch (error) {
+    return {
+      message: 'Database Error: Failed to Create Product.',
+    };
+  }
+
+  revalidatePath('/dashboard/products');
+  redirect('/dashboard/products');
+};
+
 const UpdateInvoice = FormSchema.omit({ id: true, date: true });
+const UpdateProduct = FormSchema.omit({ id: true, date: true });
 
 // export async function updateInvoice(id: string, formData: FormData) {
 //   const { customerId, amount, status } = UpdateInvoice.parse({
@@ -123,6 +159,53 @@ export async function updateInvoice(
   revalidatePath('/dashboard/invoices');
   redirect('/dashboard/invoices');
 }
+
+export async function updateProduct(
+  id: string,
+  prevState: State,
+  formData: FormData,
+) {
+  const validatedFields = UpdateProduct.safeParse({
+    customerId: formData.get('customerId'),
+    amount: formData.get('amount'),
+    status: formData.get('status'),
+  });
+
+  if (!validatedFields.success) {
+    return {
+      errors: validatedFields.error.flatten().fieldErrors,
+      message: 'Missing Fields. Failed to Update Product.',
+    };
+  }
+
+  const { customerId, amount, status } = validatedFields.data;
+  const amountInCents = amount * 100;
+
+  try {
+    await sql`
+      UPDATE products
+      SET customer_id = ${customerId}, amount = ${amountInCents}, status = ${status}
+      WHERE id = ${id}
+    `;
+  } catch (error) {
+    return { message: 'Database Error: Failed to Update Product.' };
+  }
+
+  revalidatePath('/dashboard/products');
+  redirect('/dashboard/products');
+};
+
+export async function deleteProduct(id: string) {
+  // throw new Error('Failed to Delete Product');
+
+  try {
+    await sql`DELETE FROM products WHERE id = ${id}`;
+    revalidatePath('/dashboard/products');
+    return { message: 'Deleted Product.' };
+  } catch (error) {
+    return { message: 'Database Error: Failed to Delete Product.' };
+  }
+};
 
 export async function deleteInvoice(id: string) {
   // throw new Error('Failed to Delete Invoice');

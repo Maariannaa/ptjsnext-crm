@@ -5,8 +5,11 @@ import {
   CustomerField,
   CustomersTableType,
   InvoiceForm,
+  ProductForm,
+  ProductsTable,
   InvoicesTable,
   LatestInvoiceRaw,
+  LatestProductRaw,
   User,
   Revenue,
 } from './definitions';
@@ -58,6 +61,32 @@ export async function fetchLatestInvoices() {
   } catch (error) {
     console.error('Database Error:', error);
     throw new Error('Failed to fetch the latest invoices.');
+  }
+}
+
+export async function fetchLatestProducts() {
+  noStore();
+  try {
+
+    console.log('Fetching revenue data...');
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+
+    const data = await sql<LatestProductRaw>`
+    SELECT products.amount, customers.name, customers.image_url, customers.email, products.id
+    FROM products
+    JOIN customers ON products.customer_id = customers.id
+    ORDER BY products.date DESC
+    LIMIT 5`;
+
+    console.log('Data fetch completed after 3 seconds.');
+    const latestProducts = data.rows.map((product) => ({
+      ...product,
+      amount: formatCurrency(product.amount),
+    }));
+    return latestProducts;
+  } catch (error) {
+    console.error('Database Error:', error);
+    throw new Error('Failed to fetch the latest products.');
   }
 }
 
@@ -136,6 +165,43 @@ export async function fetchFilteredInvoices(
   }
 }
 
+export async function fetchFilteredProducts(
+  query: string,
+  currentPage: number,
+) {
+  noStore();
+
+  const offset = (currentPage - 1) * ITEMS_PER_PAGE;
+
+  try {
+    const products = await sql<ProductsTable>`
+      SELECT
+        products.id,
+        products.amount,
+        products.date,
+        products.status,
+        customers.name,
+        customers.email,
+        customers.image_url
+      FROM products
+      JOIN customers ON products.customer_id = customers.id
+      WHERE
+        customers.name ILIKE ${`%${query}%`} OR
+        customers.email ILIKE ${`%${query}%`} OR
+        products.amount::text ILIKE ${`%${query}%`} OR
+        products.date::text ILIKE ${`%${query}%`} OR
+        products.status ILIKE ${`%${query}%`}
+      ORDER BY products.date DESC
+      LIMIT ${ITEMS_PER_PAGE} OFFSET ${offset}
+    `;
+
+    return products.rows;
+  } catch (error) {
+    console.error('Database Error:', error);
+    throw new Error('Failed to fetch products.');
+  }
+}
+
 export async function fetchInvoicesPages(query: string) {
   noStore();
 
@@ -156,6 +222,56 @@ export async function fetchInvoicesPages(query: string) {
   } catch (error) {
     console.error('Database Error:', error);
     throw new Error('Failed to fetch total number of invoices.');
+  }
+}
+
+export async function fetchProductsPages(query: string) {
+  noStore();
+
+  try {
+    const count = await sql`SELECT COUNT(*)
+    FROM products
+    JOIN customers ON products.customer_id = customers.id
+    WHERE
+      customers.name ILIKE ${`%${query}%`} OR
+      customers.email ILIKE ${`%${query}%`} OR
+      products.amount::text ILIKE ${`%${query}%`} OR
+      products.date::text ILIKE ${`%${query}%`} OR
+      products.status ILIKE ${`%${query}%`}
+  `;
+
+    const totalPages = Math.ceil(Number(count.rows[0].count) / ITEMS_PER_PAGE);
+    return totalPages;
+  } catch (error) {
+    console.error('Database Error:', error);
+    throw new Error('Failed to fetch total number of products.');
+  }
+}
+
+export async function fetchProductById(id: string) {
+  noStore();
+
+  try {
+    const data = await sql<ProductForm>`
+      SELECT
+        products.id,
+        products.customer_id,
+        products.amount,
+        products.status
+      FROM products
+      WHERE products.id = ${id};
+    `;
+
+    const product = data.rows.map((product) => ({
+      ...product,
+      // Convert amount from cents to dollars
+      amount: product.amount / 100,
+    }));
+
+    return product[0];
+  } catch (error) {
+    console.error('Database Error:', error);
+    throw new Error('Failed to fetch product.');
   }
 }
 
