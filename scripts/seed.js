@@ -1,6 +1,7 @@
 const { db } = require('@vercel/postgres');
 const {
   invoices,
+  products,
   customers,
   revenue,
   users,
@@ -125,6 +126,46 @@ async function seedCustomers(client) {
   }
 }
 
+async function seedProducts(client) {
+  try {
+    await client.sql`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`;
+
+    // Create the "invoices" table if it doesn't exist
+    const createTable = await client.sql`
+    CREATE TABLE IF NOT EXISTS products (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    customer_id UUID NOT NULL,
+    amount INT NOT NULL,
+    status VARCHAR(255) NOT NULL,
+    date DATE NOT NULL
+  );
+`;
+
+    console.log(`Created "products" table`);
+
+    // Insert data into the "products" table
+    const insertedProducts = await Promise.all(
+      products.map(
+        (product) => client.sql`
+        INSERT INTO products (customer_id, amount, status, date)
+        VALUES (${product.customer_id}, ${product.amount}, ${product.status}, ${product.date})
+        ON CONFLICT (id) DO NOTHING;
+      `,
+      ),
+    );
+
+    console.log(`Seeded ${insertedProducts.length} products`);
+
+    return {
+      createTable,
+      products: insertedProducts,
+    };
+  } catch (error) {
+    console.error('Error seeding products:', error);
+    throw error;
+  }
+}
+
 async function seedRevenue(client) {
   try {
     // Create the "revenue" table if it doesn't exist
@@ -166,6 +207,7 @@ async function main() {
   await seedUsers(client);
   await seedCustomers(client);
   await seedInvoices(client);
+  await seedProducts(client);
   await seedRevenue(client);
 
   await client.end();
